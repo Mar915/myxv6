@@ -82,6 +82,9 @@ struct trapframe {
 
 // Per-process state
 struct proc {
+
+  int cputime; // Task 2 requirement
+
   struct spinlock lock;
 
   // p->lock must be held when using these:
@@ -103,4 +106,5 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
 };
