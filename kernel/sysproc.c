@@ -118,3 +118,20 @@ sys_wait2(void)     // Task 3 requirement
 
   return wait2(p1, p2); // status
 }
+
+// add get and set priorty, set: getting the priorty and getting given priority in a0 like argint() int num = p->trapframe->a0
+uint64
+sys_getpriority(void)
+{
+  return getpriority(myproc()->priority);
+}
+
+uint64
+sys_setpriority(void)
+{
+  int pr = sys_getpriority();
+  struct proc *p = myproc();
+  p->trapframe->a0 = pr;
+  
+  return setpriority(p->trapframe->a0);
+}

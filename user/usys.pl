@@ -37,4 +37,6 @@ entry("sbrk");
 entry("sleep");
 entry("uptime");
 entry("getprocs");
-entry("wait2");   # Task 3 requirement
+entry("wait2");
+entry("getpriority");
+entry("setpriority");

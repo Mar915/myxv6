@@ -105,7 +105,9 @@ extern uint64 sys_wait(void);
 extern uint64 sys_write(void);
 extern uint64 sys_uptime(void);
 extern uint64 sys_getprocs(void);
-extern uint64 sys_wait2(void);    // Task 3 requirement
+extern uint64 sys_wait2(void);
+extern uint64 sys_getpriority(void);
+extern uint64 sys_setpriority(void);
 
 static uint64 (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -130,7 +132,10 @@ static uint64 (*syscalls[])(void) = {
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
 [SYS_getprocs]   sys_getprocs,
-[SYS_wait2]   sys_wait2,      // Task 3 requirement
+[SYS_wait2]   sys_wait2,
+[SYS_getpriority] sys_getpriority,
+[SYS_setpriority] sys_setpriority,
+
 };
 
 void

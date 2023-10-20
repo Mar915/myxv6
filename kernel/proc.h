@@ -83,7 +83,11 @@ struct trapframe {
 // Per-process state
 struct proc {
 
-  int cputime; // Task 2 requirement
+  int cputime;
+
+  int priority; // Task 1 requirement
+
+  int readytime; // Task 2 requirement
 
   struct spinlock lock;
 

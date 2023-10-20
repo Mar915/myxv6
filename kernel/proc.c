@@ -6,6 +6,7 @@
 #include "proc.h"
 #include "pstat.h"
 #include "defs.h"
+#include "syscall.h"
 
 struct cpu cpus[NCPU];
 
@@ -123,7 +124,7 @@ found:
   p->pid = allocpid();
   p->state = USED;
 
-  time.cputime = 0; // process is created so cputime is initialized
+  time.cputime = 0;
   
 
   // Allocate a trapframe page.
@@ -462,6 +463,7 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+        p->readytime = sys_uptime();
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
@@ -680,6 +682,7 @@ procinfo(uint64 addr)
     procinfo.pid = p->pid;
     procinfo.state = p->state;
     procinfo.size = p->sz;
+    procinfo.priority = p->priority;
     if (p->parent)
       procinfo.ppid = (p->parent)->pid;
     else
@@ -753,3 +756,24 @@ wait2(uint64 addr1, uint64 addr2)
   }
   
 }
+
+// looking for current proccess priority
+int getpriority(uint64 pr){
+  struct proc *p = myproc();
+  
+  int prior = p->priority;
+  return prior;
+
+}
+
+
+int setpriority(uint64 pr){
+  struct proc *p = myproc();
+
+  struct proc prior;
+
+  prior.priority = p->priority;
+  return prior.priority;
+}
+
+
