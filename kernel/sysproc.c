@@ -41,14 +41,25 @@ sys_wait(void)
 uint64
 sys_sbrk(void)
 {
+  
   int addr;
   int n;
 
   if(argint(0, &n) < 0)
     return -1;
+  
   addr = myproc()->sz;
+  if(n > 0){
+    myproc()->sz = myproc()->sz + n;
+  }else{
+    uint sz = myproc()->sz;
+    myproc()->sz = uvmdealloc(myproc()->pagetable, sz, sz+n);
+  }
+  /*
   if(growproc(n) < 0)
     return -1;
+  */
+
   return addr;
 }
 
@@ -134,4 +145,9 @@ sys_setpriority(void)
   p->trapframe->a0 = pr;
   
   return setpriority(p->trapframe->a0);
+}
+
+uint64
+sys_freepmem(void){
+ return (nfreepages() * PGSIZE);
 }
