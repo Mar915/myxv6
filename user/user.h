@@ -31,6 +31,8 @@ int wait2(int*, struct rusage*);
 int getpriority(int*, struct proc*);
 int setpriority(int);
 uint64 freepmem(void);
+void *mmap(void*, int, int, int, int, void*);
+int munmap(void*, int);
 
 // ulib.c
 int stat(const char*, struct stat*);
