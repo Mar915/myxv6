@@ -485,7 +485,6 @@ sys_pipe(void)
   return 0;
 }
 
-// Task 1a
 // Create a new mapped memory region
 uint64
 sys_mmap()
@@ -498,23 +497,12 @@ sys_mmap()
   uint64 start_addr;
 
   /* Add error checking for length, prot, and flags arguments */
-  if (length <= 0){
-    return -1;
-  }
 
-  if((prot & ~(PROT_READ | PROT_WRITE)) != 0){
+  if (argaddr(1, &length) < 0 || length <= 0)
     return -1;
-  }
-
-  if((flags & ~(MAP_ANONYMOUS | MAP_PRIVATE | MAP_SHARED)) != 0){
+  if (argint(2, &prot) < 0 || (prot & ~(PROT_READ | PROT_WRITE)) != 0)
     return -1;
-  }
-
-  if (argaddr(1, &length) < 0)
-    return -1;
-  if (argint(2, &prot) < 0)
-    return -1;
-  if (argint(3, &flags) <0)
+  if (argint(3, &flags) <0 || (flags & ~(MAP_SHARED| MAP_PRIVATE | MAP_ANONYMOUS)) != 0)
     return -1;
   // Search p->mmr[] for unused location 
   for (int i = 0; i < MAX_MMR; i++) {
@@ -548,7 +536,6 @@ sys_mmap()
     return -1;
   }
 }
-
 
 // Unmap memory region if it exists
 // Free physical memory if no other process has the region mapped

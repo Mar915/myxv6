@@ -7,6 +7,7 @@
 #include "pstat.h"
 #include "defs.h"
 #include "syscall.h"
+#include "stat.h"
 
 struct cpu cpus[NCPU];
 
@@ -163,9 +164,34 @@ found:
 static void
 freeproc(struct proc *p)
 {
+  int dofree;
+  
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+  for (int i = 0; i < MAX_MMR; i++) {
+    dofree = 0;
+    if (p->mmr[i].valid == 1) {
+      if (p->mmr[i].flags & MAP_PRIVATE)
+        dofree = 1;
+      else { // MAP_SHARED
+        acquire(&mmr_list[p->mmr[i].mmr_family.listid].lock);
+        if (p->mmr[i].mmr_family.next == &(p->mmr[i].mmr_family)) { // no other family members
+          dofree = 1;
+          release(&mmr_list[p->mmr[i].mmr_family.listid].lock);
+          dealloc_mmr_listid(p->mmr[i].mmr_family.listid);
+        } else {  // remove p from mmr family
+          (p->mmr[i].mmr_family.next)->prev = p->mmr[i].mmr_family.prev;
+          (p->mmr[i].mmr_family.prev)->next = p->mmr[i].mmr_family.next;
+          release(&mmr_list[p->mmr[i].mmr_family.listid].lock);
+        }
+      }
+      // Remove region mappings from page table
+      for (uint64 addr = p->mmr[i].addr; addr < p->mmr[i].addr + p->mmr[i].length; addr += PGSIZE)
+        if (walkaddr(p->pagetable, addr))
+          uvmunmap(p->pagetable, addr, 1, dofree);
+    }
+  }
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -297,7 +323,7 @@ fork(void)
   }
 
   // Copy user memory from parent to child.
-  if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
+  if(uvmcopy(p->pagetable, np->pagetable, 0, p->sz) < 0){
     freeproc(np);
     release(&np->lock);
     return -1;
@@ -321,6 +347,46 @@ fork(void)
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
+
+  // Copy mmr table from parent to child
+  memmove((char*)np->mmr, (char *)p->mmr, MAX_MMR*sizeof(struct mmr));
+  // For each valid mmr, copy memory from parent to child, allocating new memory for
+  // private regions but not for shared regions, and add child to family for shared regions.
+  for (int i = 0; i < MAX_MMR; i++) {
+    if(p->mmr[i].valid == 1) {
+      if(p->mmr[i].flags & MAP_PRIVATE) {
+        for (uint64 addr = p->mmr[i].addr; addr < p->mmr[i].addr+p->mmr[i].length; addr += PGSIZE)
+          if(walkaddr(p->pagetable, addr))
+            if(uvmcopy(p->pagetable, np->pagetable, addr, addr+PGSIZE) < 0) {
+              freeproc(np);
+              release(&np->lock);
+              return -1;
+            }
+        np->mmr[i].mmr_family.proc = np;
+        np->mmr[i].mmr_family.listid = -1;
+        np->mmr[i].mmr_family.next = &(np->mmr[i].mmr_family);
+        np->mmr[i].mmr_family.prev = &(np->mmr[i].mmr_family);
+      } else { // MAP_SHARED
+        for (uint64 addr = p->mmr[i].addr; addr < p->mmr[i].addr+p->mmr[i].length; addr += PGSIZE)
+          if(walkaddr(p->pagetable, addr))
+            if(uvmcopyshared(p->pagetable, np->pagetable, addr, addr+PGSIZE) < 0) {
+              freeproc(np);
+              release(&np->lock);
+              return -1;
+            }
+        // add child process np to family for this mapped memory region
+        np->mmr[i].mmr_family.proc = np;
+        np->mmr[i].mmr_family.listid = p->mmr[i].mmr_family.listid;
+        acquire(&mmr_list[p->mmr[i].mmr_family.listid].lock);
+        np->mmr[i].mmr_family.next = p->mmr[i].mmr_family.next;
+        p->mmr[i].mmr_family.next = &(np->mmr[i].mmr_family);
+        np->mmr[i].mmr_family.prev = &(p->mmr[i].mmr_family);
+        if (p->mmr[i].mmr_family.prev == &(p->mmr[i].mmr_family))
+          p->mmr[i].mmr_family.prev = &(np->mmr[i].mmr_family);
+        release(&mmr_list[p->mmr[i].mmr_family.listid].lock);
+      }
+    }
+  }
 
   release(&np->lock);
 
@@ -784,47 +850,45 @@ int setpriority(uint64 pr){
 }
 
 
-// Initialize mmr_list
 void
 mmrlistinit(void)
 {
   struct mmr_list *pmmrlist;
-  initlock(&listid_lock,"listid");
-  for (pmmrlist = mmr_list; pmmrlist < &mmr_list[NPROC*MAX_MMR]; pmmrlist++) {
+  initlock(&listid_lock, "listid");
+  for (pmmrlist = mmr_list; pmmrlist < &mmr_list[NPROC*MAX_MMR]; pmmrlist++)
+  {
     initlock(&pmmrlist->lock, "mmrlist");
     pmmrlist->valid = 0;
   }
+  
 }
 
-// find the mmr_list for a given listid
 struct mmr_list*
-get_mmr_list(int listid) {
+get_mmr_list(int listid){
   acquire(&listid_lock);
-  if (listid >=0 && listid < NPROC*MAX_MMR && mmr_list[listid].valid) {
+  if(listid >= 0 && listid < NPROC*MAX_MMR && mmr_list[listid].valid){
     release(&listid_lock);
     return(&mmr_list[listid]);
-  }
-  else {
+  }else{
     release(&listid_lock);
     return 0;
   }
 }
 
-// free up entry in mmr_list array
 void
-dealloc_mmr_listid(int listid) {
+dealloc_mmr_listid(int listid){
   acquire(&listid_lock);
   mmr_list[listid].valid = 0;
   release(&listid_lock);
 }
 
-// find an unused entry in the mmr_list array
 int
-alloc_mmr_listid() {
+alloc_mmr_listid(){
   acquire(&listid_lock);
   int listid = -1;
-  for (int i = 0; i < NPROC*MAX_MMR; i++) {
-    if (mmr_list[i].valid == 0) {
+  for (int i = 0; i < NPROC*MAX_MMR; i++)
+  {
+    if(mmr_list[i].valid == 0){
       mmr_list[i].valid = 1;
       listid = i;
       break;
@@ -833,4 +897,3 @@ alloc_mmr_listid() {
   release(&listid_lock);
   return(listid);
 }
-
