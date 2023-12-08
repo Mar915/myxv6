@@ -151,3 +151,122 @@ uint64
 sys_freepmem(void){
  return (nfreepages() * PGSIZE);
 }
+
+uint64
+sys_sem_init(void){
+
+  struct proc *p = myproc();
+
+  uint64 addr;
+  int start;
+  int pshared;
+  int index;
+
+  if(argaddr(0, &addr) < 0){
+    return -1;
+  }
+
+  if(argint(1, &pshared) < 0){
+    return -1;
+  }
+
+  if(pshared == 0){
+    return -1;
+  }
+
+  if(argint(2, &start) < 0){
+    return -1;
+  }
+
+  index = semalloc();
+  semtable.sem[index].count = start;
+
+  if(copyout(p->pagetable,addr,(char*) &index, sizeof(index)) < 0){
+    return -1;
+  }
+
+  return 0;
+  
+}
+
+uint64
+sys_sem_destroy(void){
+
+  struct proc *p = myproc();
+
+  uint64 addr;
+  int index;
+
+  if(argaddr(0,&addr) < 0){
+    return -1;
+  }
+
+  acquire(&semtable.lock);
+
+  if(copyin(p->pagetable,(char*) &index, addr, sizeof(int)) < 0){
+    release(&semtable.lock);
+    return 0;
+  }
+
+  semadealloc(index);
+  release(&semtable.lock);
+  return 0;
+  
+}
+
+uint64
+sys_sem_wait(void){
+
+  struct proc *p = myproc();
+  uint64 addr;
+  int index;
+
+  if(argaddr(0,&addr) < 0){
+    return -1;
+  }
+
+  copyin(p->pagetable,(char*) &index, addr, sizeof(int));
+  acquire(&semtable.sem[index].lock);
+
+  if(semtable.sem[index].count > 0){
+
+    semtable.sem[index].count--;
+    release(&semtable.sem[index].lock);
+    return 0;
+  }else{
+
+    while(semtable.sem[index].count == 0){
+      
+      sleep((void*)&semtable.sem[index], &semtable.sem[index].lock);
+    }
+
+    semtable.sem[index].count -= 1;
+    release(&semtable.sem[index].lock);
+  }
+
+  return 0;
+  
+}
+
+uint64
+sys_sem_post(void){
+
+  struct proc *p = myproc();
+  uint64 addr;
+  int index;
+
+  if(argaddr(0, &addr) < 0){
+    return -1;
+  }
+
+  copyin(p->pagetable,(char *)&index, addr, sizeof(int));
+  acquire(&semtable.sem[index].lock);
+
+  semtable.sem[index].count += 1;
+  wakeup((void*)&semtable.sem[index]);
+
+  release(&semtable.sem[index].lock);
+
+  return 0;
+  
+}

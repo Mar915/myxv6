@@ -110,7 +110,6 @@ int             wait2(uint64,uint64);
 uint64          sys_uptime(void);
 int             getpriority(uint64 pr);
 int             setpriority(uint64 pr);
-// Task 1a
 struct mmr_list* get_mmr_list(int);
 int alloc_mmr_listid(void);
 void dealloc_mmr_listid(int);
@@ -118,6 +117,11 @@ void mmrlistinit(void);
 
 // swtch.S
 void            swtch(struct context*, struct context*);
+
+// semaphore.c
+void            seminit(void);
+int             semalloc(void);
+void            semadealloc(sem_t);
 
 // spinlock.c
 void            acquire(struct spinlock*);

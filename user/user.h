@@ -33,6 +33,10 @@ int setpriority(int);
 uint64 freepmem(void);
 void *mmap(void*, int, int, int, int, void*);
 int munmap(void*, int);
+int sem_init(sem_t*, int, int);
+int sem_destroy(sem_t*);
+int sem_wait(sem_t*);
+int sem_post(sem_t*);
 
 // ulib.c
 int stat(const char*, struct stat*);
